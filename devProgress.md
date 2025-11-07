@@ -19,7 +19,46 @@
 
 *Features implemented by Claude Code, awaiting human verification*
 
-*Nothing here yet - start building!*
+### MVP - Minimal Viable Product ⭐
+
+- [x] HQ Pi MVP Server
+  - Flask server with WebSocket support (Flask-SocketIO)
+  - Web UI showing list of connected collectors
+  - Health check endpoint: `/api/health` and `/api/collectors`
+  - Accessible via Tailscale: http://100.74.135.15:5000
+  - File: `hq-pi/flask_app/main.py`
+
+- [x] Collector MVP Agent
+  - Connects to HQ Pi via WebSocket (Tailscale)
+  - Registers with unique device_id (hostname-based)
+  - Auto-reconnect with exponential backoff (1-30 seconds)
+  - Heartbeat every 30 seconds
+  - Graceful shutdown on Ctrl+C
+  - File: `collector/collector.py`
+
+- [x] Shared Protocol Definitions
+  - Message types for all WebSocket communication
+  - Helper functions for creating messages
+  - Validation functions
+  - File: `shared/protocol.py`
+
+- [x] Web UI
+  - Real-time display of connected collectors
+  - WebSocket status indicator
+  - Live collector count
+  - Responsive card layout
+  - File: `hq-pi/templates/index.html`
+
+- [x] Git repository setup
+  - Initialized on HQ Pi
+  - All code committed
+  - Ready to pull to laptop
+
+- [x] Documentation
+  - TEST_MVP.md with testing instructions
+  - All dependencies installed (venv created)
+
+**Test Instructions:** See `TEST_MVP.md` for step-by-step testing guide.
 
 ---
 
@@ -27,26 +66,7 @@
 
 *Currently being worked on*
 
-### MVP - Minimal Viable Product (Current Focus)
-
-- [ ] HQ Pi MVP Server
-  - Flask server with WebSocket support (Flask-SocketIO)
-  - Web UI showing list of connected collectors
-  - Health check endpoint
-  - Accessible via Tailscale: http://100.74.135.15:5000
-
-- [ ] Collector MVP Agent
-  - Connects to HQ Pi via WebSocket (Tailscale)
-  - Registers with unique device_id (hostname-based)
-  - Auto-reconnect with exponential backoff
-  - Heartbeat/keepalive mechanism
-  - Graceful shutdown
-
-- [ ] Git repository setup
-  - Initialize repo on HQ Pi
-  - Add .gitignore
-  - Commit MVP code
-  - Ready to pull to laptop
+*Nothing in progress - awaiting MVP testing*
 
 ---
 
@@ -253,9 +273,10 @@
 
 - **Total Features Planned:** 45+
 - **Completed (Tested):** 2
+- **Done (AI - Awaiting Test):** 6 (MVP complete!)
 - **In Progress:** 0
 - **Broken:** 0
-- **Phase 1 Remaining:** 21
+- **Phase 1 Remaining:** 15
 
 ---
 
@@ -271,20 +292,21 @@
 
 ## 💡 Notes for Future Sessions
 
-**Current Focus:** Building HQ Pi Flask server with WebSocket hub
+**Current Focus:** MVP Testing & Deployment to Laptop
 
 **Next Steps:**
-1. Set up Flask app with basic routing
-2. Implement WebSocket hub with Flask-SocketIO
-3. Create shared protocol definitions
-4. Build simple collector that sends test data
+1. Test MVP on HQ Pi (both server + collector locally)
+2. Open web UI from phone/laptop via Tailscale
+3. Pull repo to laptop and run collector there
+4. Verify 2 collectors connect successfully
+5. After successful testing → Start building plugins
 
-**Blockers:** None currently
+**Blockers:** None - MVP is ready to test!
 
-**Questions/Decisions Needed:**
-- Which OS to target first for collector? (Windows/macOS/Linux)
-- Should we use Pydantic for message validation or keep it simpler?
-- Store context in memory only or add Redis option early?
+**Decisions Made:**
+- ✅ Kept protocol simple (no Pydantic for MVP)
+- ✅ In-memory context store (no Redis for MVP)
+- ✅ Auto-reconnect with exponential backoff (1-30s)
 
 ---
 
