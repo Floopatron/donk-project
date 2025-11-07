@@ -1,0 +1,12 @@
+# HQ Pi Server Dependencies
+
+# Web framework
+Flask==2.2.2
+Flask-SocketIO==5.3.5
+
+# WebSocket support
+python-socketio==5.10.0
+eventlet==0.33.3
+
+# Utilities
+python-dotenv==1.0.0

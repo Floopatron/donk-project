@@ -1,0 +1,10 @@
+# Collector Agent Dependencies
+
+# WebSocket client
+python-socketio[client]==5.10.0
+
+# Utilities
+python-dotenv==1.0.0
+
+# Future plugins will add their own dependencies
+# e.g., psutil for system monitoring
