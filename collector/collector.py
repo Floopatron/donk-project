@@ -26,20 +26,25 @@ from datetime import datetime
 import socketio
 
 # Add shared module to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "shared"))
-from protocol import (
+# Changes to run on laptop
+ROOT = Path(__file__).resolve().parents[1]  # repo root: ...\donk-project\donk-project
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+    
+from shared.protocol import (
     MessageType,
     create_collector_register,
     create_collector_heartbeat
 )
 
 # Configure logging
+logging.getLogger().setLevel(logging.DEBUG)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
+logger.setLevel(logging.DEBUG)
 # Global flag for graceful shutdown
 shutdown_requested = False
 
