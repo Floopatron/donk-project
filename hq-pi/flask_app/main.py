@@ -11,7 +11,7 @@ This is the central server that:
 import sys
 import os
 from pathlib import Path
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request
 from flask_socketio import SocketIO, emit, disconnect
 from datetime import datetime
 import logging
@@ -32,8 +32,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize Flask app
-app = Flask(__name__)
+# Initialize Flask app with correct paths
+# Templates and static folders are in parent directory (hq-pi/)
+base_dir = Path(__file__).parent.parent
+app = Flask(
+    __name__,
+    template_folder=str(base_dir / 'templates'),
+    static_folder=str(base_dir / 'static')
+)
 app.config['SECRET_KEY'] = 'donk-secret-key-change-in-production'  # TODO: Move to config file
 
 # Initialize SocketIO with eventlet
@@ -88,7 +94,7 @@ def get_collectors():
 # =============================================================================
 
 @socketio.on('connect')
-def handle_connect():
+def handle_connect(auth=None):
     """Handle client connection"""
     logger.info(f"Client connected: {request.sid}")
     emit('connection_established', {'status': 'connected'})
@@ -203,7 +209,7 @@ def broadcast_collector_list():
     ]
 
     message = create_collector_list(collectors)
-    socketio.emit(MessageType.COLLECTOR_LIST, message, broadcast=True)
+    socketio.emit(MessageType.COLLECTOR_LIST, message)
     logger.debug(f"Broadcasted collector list: {len(collectors)} collectors")
 
 
