@@ -122,14 +122,17 @@ def create_command(device_id: str, plugin_id: str, command_id: str, args: Option
     }
 
 
-def create_command_result(command_id: str, success: bool, message: str, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def create_command_result(device_id: str, plugin_id: str, command_id: str, success: bool, message: str, request_id: Optional[str] = None, data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     Create a command result message
 
     Args:
+        device_id: Collector identifier
+        plugin_id: Plugin identifier
         command_id: ID of executed command
         success: Whether command succeeded
         message: Result message
+        request_id: Optional request ID for tracking
         data: Additional result data (optional)
 
     Returns:
@@ -137,9 +140,12 @@ def create_command_result(command_id: str, success: bool, message: str, data: Op
     """
     return {
         "type": MessageType.COMMAND_RESULT,
+        "device_id": device_id,
+        "plugin_id": plugin_id,
         "command_id": command_id,
         "success": success,
         "message": message,
+        "request_id": request_id,
         "data": data or {},
         "timestamp": datetime.utcnow().isoformat()
     }

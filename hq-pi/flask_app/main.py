@@ -22,8 +22,13 @@ from protocol import (
     MessageType,
     create_collector_list,
     create_error,
+    create_command,
     validate_message
 )
+
+# Import plugin system
+from plugin_loader import PluginLoader
+from context_store import ContextStore
 
 # Configure logging
 logging.basicConfig(
@@ -48,6 +53,15 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 # In-memory storage for connected collectors
 # Structure: {session_id: {device_id, hostname, platform, connected_at}}
 connected_collectors = {}
+
+# Initialize plugin system
+plugin_loader = PluginLoader()
+context_store = ContextStore()
+
+# Load plugins at startup
+logger.info("Loading plugins...")
+loaded_plugins = plugin_loader.load_all_plugins()
+logger.info(f"Loaded {len(loaded_plugins)} renderer plugins")
 
 
 # =============================================================================
@@ -86,6 +100,49 @@ def get_collectors():
     return jsonify({
         "collectors": collectors,
         "count": len(collectors)
+    })
+
+
+@app.route('/api/context/<device_id>')
+def get_device_context(device_id):
+    """Get all plugin context for a specific device"""
+    context = context_store.get_device_context(device_id)
+    return jsonify({
+        "device_id": device_id,
+        "context": context
+    })
+
+
+@app.route('/api/context/<device_id>/<plugin_id>')
+def get_plugin_context(device_id, plugin_id):
+    """Get specific plugin context for a device"""
+    context = context_store.get_context(device_id, plugin_id)
+    if context is None:
+        return jsonify({"error": "Context not found"}), 404
+
+    return jsonify({
+        "device_id": device_id,
+        "plugin_id": plugin_id,
+        "context": context
+    })
+
+
+@app.route('/api/plugins')
+def get_loaded_plugins():
+    """Get list of loaded plugins"""
+    plugins = []
+    for plugin_id, plugin_info in loaded_plugins.items():
+        manifest = plugin_info['manifest']
+        plugins.append({
+            "plugin_id": plugin_id,
+            "name": manifest['name'],
+            "version": manifest['version'],
+            "author": manifest.get('author', 'Unknown')
+        })
+
+    return jsonify({
+        "plugins": plugins,
+        "count": len(plugins)
     })
 
 
@@ -199,6 +256,148 @@ def handle_collector_heartbeat(data):
 def handle_ping(data):
     """Handle ping request"""
     emit(MessageType.PONG, {'timestamp': datetime.now(timezone.utc).isoformat()})
+
+
+@socketio.on(MessageType.CONTEXT_UPDATE)
+def handle_context_update(data):
+    """
+    Handle context update from collector plugin
+
+    Expected data:
+    {
+        "type": "context_update",
+        "device_id": "laptop-main",
+        "plugin_id": "youtube",
+        "data": {...},
+        "timestamp": "..."
+    }
+    """
+    device_id = data.get('device_id')
+    plugin_id = data.get('plugin_id')
+    context_data = data.get('data')
+    timestamp = data.get('timestamp')
+
+    if not all([device_id, plugin_id, context_data]):
+        logger.warning(f"Invalid context update: missing required fields")
+        return
+
+    # Store context
+    context_store.update_context(device_id, plugin_id, context_data, timestamp)
+    logger.info(f"Received context update: {device_id} / {plugin_id}")
+
+    # Render widgets for this plugin
+    widgets = plugin_loader.render_plugin_widgets(plugin_id, context_data)
+
+    if widgets is not None:
+        # Broadcast plugin update to all connected UI clients
+        socketio.emit('plugin_update', {
+            'device_id': device_id,
+            'plugin_id': plugin_id,
+            'widgets': widgets,
+            'context': context_data,
+            'timestamp': timestamp
+        })
+        logger.debug(f"Broadcasted plugin update: {plugin_id}")
+
+
+@socketio.on(MessageType.COMMAND_RESULT)
+def handle_command_result(data):
+    """
+    Handle command result from collector
+
+    Expected data:
+    {
+        "type": "command_result",
+        "device_id": "laptop-main",
+        "plugin_id": "youtube",
+        "command_id": "...",
+        "success": true,
+        "message": "...",
+        "request_id": "..."
+    }
+    """
+    logger.info(f"Received command result: {data}")
+
+    # Broadcast to UI clients
+    socketio.emit('command_result', data)
+
+
+@socketio.on('request_context')
+def handle_request_context(data):
+    """
+    Handle request for immediate context update from UI
+
+    Expected data:
+    {
+        "device_id": "laptop-main",
+        "plugin_id": "youtube"  (optional)
+    }
+    """
+    device_id = data.get('device_id')
+    plugin_id = data.get('plugin_id')
+
+    if not device_id:
+        emit('error', create_error("device_id required"))
+        return
+
+    # Find collector session
+    collector_session = None
+    for sid, info in connected_collectors.items():
+        if info['device_id'] == device_id:
+            collector_session = sid
+            break
+
+    if not collector_session:
+        emit('error', create_error(f"Collector not connected: {device_id}"))
+        return
+
+    # Request immediate context update from collector
+    socketio.emit('request_context', {
+        'plugin_id': plugin_id
+    }, room=collector_session)
+
+    logger.info(f"Requested context update from {device_id} for plugin: {plugin_id or 'all'}")
+
+
+@socketio.on('send_command')
+def handle_send_command(data):
+    """
+    Handle command from UI to be sent to collector
+
+    Expected data:
+    {
+        "device_id": "laptop-main",
+        "plugin_id": "youtube",
+        "command_id": "pause",
+        "args": {}
+    }
+    """
+    device_id = data.get('device_id')
+    plugin_id = data.get('plugin_id')
+    command_id = data.get('command_id')
+    args = data.get('args', {})
+
+    if not all([device_id, plugin_id, command_id]):
+        emit('error', create_error("Missing required fields"))
+        return
+
+    # Find collector session
+    collector_session = None
+    for sid, info in connected_collectors.items():
+        if info['device_id'] == device_id:
+            collector_session = sid
+            break
+
+    if not collector_session:
+        emit('error', create_error(f"Collector not connected: {device_id}"))
+        return
+
+    # Send command to collector
+    command_msg = create_command(device_id, plugin_id, command_id, args)
+    command_msg['request_id'] = data.get('request_id')  # Pass through request ID if present
+
+    socketio.emit(MessageType.COMMAND, command_msg, room=collector_session)
+    logger.info(f"Sent command to {device_id}: {plugin_id}.{command_id}")
 
 
 # =============================================================================

@@ -259,6 +259,72 @@
             margin: 0;
             color: #4ade80;
         }
+
+        /* Plugin Widgets Styles */
+        .plugin-section {
+            background: #1a1f3a;
+            border-radius: 8px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .plugin-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .plugin-icon {
+            font-size: 2em;
+            margin-right: 15px;
+        }
+
+        .plugin-title {
+            font-size: 1.5em;
+            color: #667eea;
+        }
+
+        .plugin-subtitle {
+            font-size: 0.9em;
+            color: #888;
+            margin-left: auto;
+        }
+
+        .plugin-widgets {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .widget {
+            background: #252b4a;
+            border-radius: 8px;
+            padding: 15px;
+            border-left: 4px solid #667eea;
+        }
+
+        .widget-label {
+            display: flex;
+            align-items: center;
+            font-size: 1.1em;
+        }
+
+        .widget-icon {
+            margin-right: 10px;
+            font-size: 1.3em;
+        }
+
+        .widget-text {
+            flex: 1;
+        }
+
+        .widget-text.large {
+            font-size: 1.3em;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -298,6 +364,11 @@
                     </p>
                 </div>
             </div>
+        </div>
+
+        <!-- Plugin Widgets Section -->
+        <div id="plugins-container">
+            <!-- Plugin widgets will be dynamically inserted here -->
         </div>
 
         <footer>
@@ -355,8 +426,16 @@
             }
         });
 
+        socket.on('plugin_update', (data) => {
+            console.log('Plugin update received:', data);
+            updatePluginWidgets(data);
+        });
+
         // Store collectors data for updates
         let collectorsData = {};
+
+        // Store plugin data for updates: {device_id: {plugin_id: {widgets, context, timestamp}}}
+        let pluginsData = {};
 
         // Calculate time ago
         function timeAgo(timestamp) {
@@ -517,6 +596,95 @@
                     });
                 }
             });
+        }
+
+        // Update plugin widgets
+        function updatePluginWidgets(data) {
+            const { device_id, plugin_id, widgets, context, timestamp } = data;
+
+            // Store plugin data
+            if (!pluginsData[device_id]) {
+                pluginsData[device_id] = {};
+            }
+            pluginsData[device_id][plugin_id] = { widgets, context, timestamp };
+
+            // Render all plugins
+            renderAllPlugins();
+        }
+
+        function renderAllPlugins() {
+            const container = document.getElementById('plugins-container');
+
+            // Group plugins by device
+            let html = '';
+
+            for (const [deviceId, plugins] of Object.entries(pluginsData)) {
+                for (const [pluginId, pluginData] of Object.entries(plugins)) {
+                    // Skip if no widgets (plugin inactive)
+                    if (!pluginData.widgets || pluginData.widgets.length === 0) {
+                        continue;
+                    }
+
+                    // Get collector info for display
+                    const collector = collectorsData[deviceId];
+                    const deviceName = collector ? collector.hostname : deviceId;
+
+                    // Render plugin section
+                    html += `
+                        <div class="plugin-section" data-device-id="${deviceId}" data-plugin-id="${pluginId}">
+                            <div class="plugin-header">
+                                <div class="plugin-icon">${getPluginIcon(pluginId)}</div>
+                                <div>
+                                    <div class="plugin-title">${getPluginName(pluginId)}</div>
+                                </div>
+                                <div class="plugin-subtitle">${deviceName}</div>
+                            </div>
+                            <div class="plugin-widgets">
+                                ${renderWidgets(pluginData.widgets)}
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+
+            container.innerHTML = html;
+        }
+
+        function renderWidgets(widgets) {
+            return widgets.map(widget => {
+                if (widget.type === 'label') {
+                    const sizeClass = widget.size === 'large' ? 'large' : '';
+                    const color = widget.color || '#e0e0e0';
+                    return `
+                        <div class="widget" style="border-left-color: ${color}">
+                            <div class="widget-label">
+                                ${widget.icon ? `<span class="widget-icon">${widget.icon}</span>` : ''}
+                                <span class="widget-text ${sizeClass}" style="color: ${color}">${widget.text}</span>
+                            </div>
+                        </div>
+                    `;
+                }
+                // Add more widget types here as needed
+                return '';
+            }).join('');
+        }
+
+        function getPluginIcon(pluginId) {
+            const icons = {
+                'youtube': '📺',
+                'system_monitor': '💻',
+                'audio_control': '🔊'
+            };
+            return icons[pluginId] || '🔌';
+        }
+
+        function getPluginName(pluginId) {
+            const names = {
+                'youtube': 'YouTube',
+                'system_monitor': 'System Monitor',
+                'audio_control': 'Audio Control'
+            };
+            return names[pluginId] || pluginId;
         }
 
         // Update time displays every second (no re-render, just update text)

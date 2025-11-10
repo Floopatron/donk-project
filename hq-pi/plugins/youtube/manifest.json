@@ -1,0 +1,22 @@
+{
+  "plugin_id": "youtube",
+  "version": "1.0.0",
+  "name": "YouTube Tracker",
+  "author": "donk-official",
+  "description": "Tracks YouTube activity in browsers",
+
+  "collector": {
+    "file": "collector.py",
+    "class": "YouTubeCollector",
+    "update_interval": 30,
+    "dependencies": ["psutil", "pygetwindow"]
+  },
+
+  "renderer": {
+    "file": "renderer.py",
+    "class": "YouTubeRenderer",
+    "icon": "assets/youtube-icon.svg"
+  },
+
+  "commands": []
+}

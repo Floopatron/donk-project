@@ -34,8 +34,14 @@ if str(ROOT) not in sys.path:
 from shared.protocol import (
     MessageType,
     create_collector_register,
-    create_collector_heartbeat
+    create_collector_heartbeat,
+    create_context_update,
+    create_command_result
 )
+
+# Import plugin system
+from plugin_loader import PluginLoader
+from context_aggregator import ContextAggregator
 
 # Configure logging
 logging.getLogger().setLevel(logging.DEBUG)
@@ -85,6 +91,10 @@ class DonkCollector:
         self.heartbeat_interval = 30  # seconds
         self.last_heartbeat = None
 
+        # Plugin system
+        self.plugin_loader = PluginLoader()
+        self.context_aggregator = None  # Will be initialized after connection
+
     def _generate_device_id(self) -> str:
         """
         Generate unique device ID based on hostname and platform
@@ -125,6 +135,43 @@ class DonkCollector:
         def on_connection_established(data):
             logger.debug(f"Connection established: {data}")
 
+        @self.sio.on(MessageType.COMMAND)
+        def on_command(data):
+            """Handle command from HQ Pi"""
+            logger.info(f"Received command: {data}")
+            plugin_id = data.get('plugin_id')
+            command_id = data.get('command_id')
+            args = data.get('args', {})
+            request_id = data.get('request_id')
+
+            if self.context_aggregator:
+                result = self.context_aggregator.execute_plugin_command(
+                    plugin_id, command_id, args
+                )
+                # Send result back
+                response = create_command_result(
+                    device_id=self.device_id,
+                    plugin_id=plugin_id,
+                    command_id=command_id,
+                    success=result.get('success', False),
+                    message=result.get('message', ''),
+                    request_id=request_id
+                )
+                self.sio.emit(MessageType.COMMAND_RESULT, response)
+            else:
+                logger.warning("Context aggregator not initialized, cannot execute command")
+
+        @self.sio.on('request_context')
+        def on_request_context(data):
+            """Handle immediate context request from HQ Pi"""
+            logger.info(f"Received context request: {data}")
+            plugin_id = data.get('plugin_id')  # None = all plugins
+
+            if self.context_aggregator:
+                self.context_aggregator.request_immediate_update(plugin_id)
+            else:
+                logger.warning("Context aggregator not initialized")
+
     def _send_registration(self):
         """Send registration message to HQ Pi"""
         msg = create_collector_register(
@@ -143,6 +190,39 @@ class DonkCollector:
             self.last_heartbeat = datetime.utcnow()
             logger.debug(f"Sent heartbeat")
 
+    def _send_context_update(self, plugin_id: str, context_data: dict):
+        """
+        Send context update to HQ Pi
+
+        Args:
+            plugin_id: Plugin identifier
+            context_data: Context data from plugin
+        """
+        if self.sio.connected:
+            msg = create_context_update(
+                device_id=self.device_id,
+                plugin_id=plugin_id,
+                data=context_data
+            )
+            self.sio.emit(MessageType.CONTEXT_UPDATE, msg)
+            logger.debug(f"Sent context update for plugin: {plugin_id}")
+
+    def _initialize_plugins(self):
+        """Load and initialize all plugins"""
+        logger.info("Initializing plugin system...")
+
+        # Load all plugins
+        loaded_plugins = self.plugin_loader.load_all_plugins()
+        logger.info(f"Loaded {len(loaded_plugins)} plugins")
+
+        # Start context aggregator
+        self.context_aggregator = ContextAggregator(
+            self.plugin_loader,
+            self._send_context_update
+        )
+        self.context_aggregator.start()
+        logger.info("Plugin system initialized")
+
     def connect(self):
         """Connect to HQ Pi server"""
         logger.info("="*60)
@@ -158,6 +238,9 @@ class DonkCollector:
             logger.info("Connecting to HQ Pi...")
             self.sio.connect(self.hq_url, wait_timeout=10)
             logger.info("Connection established!")
+
+            # Initialize plugins after successful connection
+            self._initialize_plugins()
 
         except Exception as e:
             logger.error(f"Failed to connect: {e}")
@@ -200,6 +283,11 @@ class DonkCollector:
     def shutdown(self):
         """Graceful shutdown"""
         logger.info("Shutting down collector...")
+
+        # Stop context aggregator
+        if self.context_aggregator:
+            logger.info("Stopping context aggregator...")
+            self.context_aggregator.stop()
 
         if self.sio.connected:
             logger.info("Disconnecting from HQ Pi...")
