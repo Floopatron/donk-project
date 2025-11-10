@@ -13,7 +13,7 @@ import os
 from pathlib import Path
 from flask import Flask, render_template, jsonify, request
 from flask_socketio import SocketIO, emit, disconnect
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 
 # Add shared module to path
@@ -66,7 +66,7 @@ def health():
     return jsonify({
         "status": "ok",
         "server": "Donk HQ Pi",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "collectors_connected": len(connected_collectors)
     })
 
@@ -98,6 +98,9 @@ def handle_connect(auth=None):
     """Handle client connection"""
     logger.info(f"Client connected: {request.sid}")
     emit('connection_established', {'status': 'connected'})
+
+    # Send current collector list to newly connected client
+    broadcast_collector_list()
 
 
 @socketio.on('disconnect')
@@ -146,7 +149,7 @@ def handle_collector_register(data):
         "device_id": device_id,
         "hostname": hostname,
         "platform": platform,
-        "connected_at": datetime.utcnow().isoformat(),
+        "connected_at": datetime.now(timezone.utc).isoformat(),
         "session_id": request.sid
     }
 
@@ -156,7 +159,7 @@ def handle_collector_register(data):
     emit('registration_ack', {
         "status": "registered",
         "device_id": device_id,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat()
     })
 
     # Broadcast updated collector list to all clients
@@ -180,8 +183,14 @@ def handle_collector_heartbeat(data):
 
     # Update last heartbeat time
     if request.sid in connected_collectors:
-        connected_collectors[request.sid]['last_heartbeat'] = datetime.utcnow().isoformat()
+        connected_collectors[request.sid]['last_heartbeat'] = datetime.now(timezone.utc).isoformat()
         logger.debug(f"Heartbeat from {device_id}")
+
+        # Send lightweight heartbeat update to UI instead of full list
+        socketio.emit('collector_heartbeat_update', {
+            'device_id': device_id,
+            'last_heartbeat': connected_collectors[request.sid]['last_heartbeat']
+        })
     else:
         logger.warning(f"Heartbeat from unregistered collector: {device_id}")
 
@@ -189,7 +198,7 @@ def handle_collector_heartbeat(data):
 @socketio.on(MessageType.PING)
 def handle_ping(data):
     """Handle ping request"""
-    emit(MessageType.PONG, {'timestamp': datetime.utcnow().isoformat()})
+    emit(MessageType.PONG, {'timestamp': datetime.now(timezone.utc).isoformat()})
 
 
 # =============================================================================
@@ -203,7 +212,9 @@ def broadcast_collector_list():
             "device_id": info["device_id"],
             "hostname": info["hostname"],
             "platform": info["platform"],
-            "connected_at": info["connected_at"]
+            "connected_at": info["connected_at"],
+            "last_heartbeat": info.get("last_heartbeat", info["connected_at"]),
+            "session_id": info["session_id"]
         }
         for info in connected_collectors.values()
     ]

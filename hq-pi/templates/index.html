@@ -101,12 +101,12 @@
             border-radius: 8px;
             padding: 20px;
             border-left: 4px solid #4ade80;
-            transition: transform 0.2s, box-shadow 0.2s;
+            transition: border-left-color 0.2s;
         }
 
-        .collector-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(0,0,0,0.4);
+        .collector-card.expanded {
+            grid-column: 1 / -1;
+            border-left-color: #667eea;
         }
 
         .collector-name {
@@ -114,6 +114,13 @@
             font-weight: bold;
             margin-bottom: 8px;
             color: #fff;
+            cursor: pointer;
+            user-select: none;
+            transition: color 0.2s;
+        }
+
+        .collector-name:hover {
+            color: #667eea;
         }
 
         .collector-info {
@@ -187,6 +194,70 @@
             border-radius: 4px;
             font-family: 'Courier New', monospace;
             font-size: 0.9em;
+        }
+
+        .collector-details {
+            display: none;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 2px solid #667eea;
+        }
+
+        .collector-card.expanded .collector-details {
+            display: block;
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .detail-item {
+            background: #1a1f3a;
+            padding: 15px;
+            border-radius: 6px;
+        }
+
+        .detail-label {
+            font-size: 0.85em;
+            color: #888;
+            margin-bottom: 5px;
+        }
+
+        .detail-value {
+            font-size: 1.1em;
+            color: #fff;
+            font-weight: bold;
+        }
+
+        .detail-value.green {
+            color: #4ade80;
+        }
+
+        .detail-value.yellow {
+            color: #fbbf24;
+        }
+
+        .detail-value.red {
+            color: #ef4444;
+        }
+
+        .raw-data {
+            background: #0a0e27;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            overflow-x: auto;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .raw-data pre {
+            margin: 0;
+            color: #4ade80;
         }
     </style>
 </head>
@@ -277,8 +348,84 @@
             updateCollectorsList(data.collectors);
         });
 
-        // Update collectors display
+        socket.on('collector_heartbeat_update', (data) => {
+            // Just update the stored data, UI will update on next tick
+            if (collectorsData[data.device_id]) {
+                collectorsData[data.device_id].last_heartbeat = data.last_heartbeat;
+            }
+        });
+
+        // Store collectors data for updates
+        let collectorsData = {};
+
+        // Calculate time ago
+        function timeAgo(timestamp) {
+            if (!timestamp) return 'Never';
+            const seconds = Math.floor((new Date() - new Date(timestamp)) / 1000);
+            if (seconds < 60) return `${seconds}s ago`;
+            const minutes = Math.floor(seconds / 60);
+            if (minutes < 60) return `${minutes}m ago`;
+            const hours = Math.floor(minutes / 60);
+            return `${hours}h ago`;
+        }
+
+        // Get status color based on last heartbeat
+        function getStatusColor(lastHeartbeat) {
+            if (!lastHeartbeat) return 'yellow';
+            const seconds = Math.floor((new Date() - new Date(lastHeartbeat)) / 1000);
+            if (seconds < 40) return 'green';  // Heartbeat every 30s, so <40s is good
+            if (seconds < 120) return 'yellow'; // Getting stale
+            return 'red'; // Likely disconnected
+        }
+
+        // Update just the time displays without re-rendering
+        function updateTimeDisplays() {
+            Object.keys(collectorsData).forEach(deviceId => {
+                const collector = collectorsData[deviceId];
+                const lastHeartbeat = collector.last_heartbeat || collector.connected_at;
+                const timeAgoText = timeAgo(lastHeartbeat);
+                const statusColor = getStatusColor(lastHeartbeat);
+                const statusText = statusColor === 'green' ? 'Active' : statusColor === 'yellow' ? 'Idle' : 'Stale';
+
+                // Update card summary view
+                const cardTimeEl = document.querySelector(`[data-device-id="${deviceId}"] .last-message-time`);
+                if (cardTimeEl) {
+                    cardTimeEl.textContent = timeAgoText;
+                    cardTimeEl.className = `detail-value ${statusColor} last-message-time`;
+                }
+
+                // Update expanded detail view
+                const detailTimeEl = document.querySelector(`[data-device-id="${deviceId}"] .detail-heartbeat-time`);
+                if (detailTimeEl) {
+                    detailTimeEl.textContent = timeAgoText;
+                    detailTimeEl.className = `detail-value ${statusColor} detail-heartbeat-time`;
+                }
+
+                const statusEl = document.querySelector(`[data-device-id="${deviceId}"] .detail-status-text`);
+                if (statusEl) {
+                    statusEl.textContent = statusText;
+                    statusEl.className = `detail-value ${statusColor} detail-status-text`;
+                }
+            });
+        }
+
+        // Update collectors display (only called when data changes)
         function updateCollectorsList(collectors) {
+            // Update stored data, preserving any newer heartbeat timestamps
+            const oldData = collectorsData;
+            collectorsData = {};
+            collectors.forEach(c => {
+                // If we have newer heartbeat data from websocket updates, keep it
+                if (oldData[c.device_id] && oldData[c.device_id].last_heartbeat) {
+                    const oldTime = new Date(oldData[c.device_id].last_heartbeat);
+                    const newTime = new Date(c.last_heartbeat || c.connected_at);
+                    if (oldTime > newTime) {
+                        c.last_heartbeat = oldData[c.device_id].last_heartbeat;
+                    }
+                }
+                collectorsData[c.device_id] = c;
+            });
+
             collectorCount.textContent = collectors.length;
 
             if (collectors.length === 0) {
@@ -295,8 +442,14 @@
                 return;
             }
 
-            collectorsList.innerHTML = collectors.map(collector => `
-                <div class="collector-card">
+            collectorsList.innerHTML = collectors.map((collector, index) => {
+                const lastHeartbeat = collector.last_heartbeat || collector.connected_at;
+                const statusColor = getStatusColor(lastHeartbeat);
+                const lastMessageTime = timeAgo(lastHeartbeat);
+                const statusText = statusColor === 'green' ? 'Active' : statusColor === 'yellow' ? 'Idle' : 'Stale';
+
+                return `
+                <div class="collector-card" data-device-id="${collector.device_id}">
                     <div class="collector-name">${collector.hostname}</div>
                     <div class="collector-info">
                         <strong>Device ID:</strong> ${collector.device_id}
@@ -304,10 +457,70 @@
                     <div class="collector-info">
                         <strong>Connected:</strong> ${new Date(collector.connected_at).toLocaleString()}
                     </div>
+                    <div class="collector-info">
+                        <strong>Last Message:</strong> <span class="detail-value ${statusColor} last-message-time" style="font-size: 0.9em;">${lastMessageTime}</span>
+                    </div>
                     <div class="collector-platform">${collector.platform}</div>
+
+                    <div class="collector-details">
+                        <h3 style="margin-bottom: 15px; color: #667eea;">📊 Collector Details</h3>
+
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <div class="detail-label">Device Name</div>
+                                <div class="detail-value">${collector.hostname}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Platform</div>
+                                <div class="detail-value">${collector.platform}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Device ID</div>
+                                <div class="detail-value" style="font-size: 0.9em;">${collector.device_id}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Connected At</div>
+                                <div class="detail-value" style="font-size: 0.9em;">${new Date(collector.connected_at).toLocaleString()}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Last Heartbeat</div>
+                                <div class="detail-value ${statusColor} detail-heartbeat-time">${lastMessageTime}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Connection Status</div>
+                                <div class="detail-value ${statusColor} detail-status-text">${statusText}</div>
+                            </div>
+                        </div>
+
+                        <h4 style="margin-bottom: 10px; color: #888;">Latest Data Received</h4>
+                        <div class="raw-data">
+                            <pre>${JSON.stringify(collector, null, 2)}</pre>
+                        </div>
+                    </div>
                 </div>
-            `).join('');
+            `;
+            }).join('');
+
+            // Add click handlers only to the card name
+            document.querySelectorAll('.collector-card').forEach(card => {
+                const nameElement = card.querySelector('.collector-name');
+                if (nameElement) {
+                    nameElement.style.cursor = 'pointer';
+                    nameElement.addEventListener('click', (e) => {
+                        e.stopPropagation(); // Prevent event bubbling
+                        // Close all other cards
+                        document.querySelectorAll('.collector-card').forEach(c => {
+                            if (c !== card) c.classList.remove('expanded');
+                        });
+                        // Toggle this card
+                        card.classList.toggle('expanded');
+                    });
+                }
+            });
         }
+
+        // Update time displays every second (no re-render, just update text)
+        setInterval(updateTimeDisplays, 1000);
 
         // Request initial collector list on connect
         socket.on('connect', () => {
