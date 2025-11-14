@@ -751,10 +751,6 @@
             currentDeviceId = deviceId;
             currentPageIndex = 0;
 
-            const collector = collectorsData[deviceId];
-            document.getElementById('current-device-name').textContent = collector.hostname;
-            document.getElementById('current-device-subtitle').textContent = `${collector.platform} • ${collector.device_id}`;
-
             renderDevicePages(deviceId);
             deviceScreen.classList.add('active');
             document.getElementById('main-screen').style.display = 'none';
