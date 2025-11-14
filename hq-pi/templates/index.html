@@ -186,41 +186,35 @@
         }
 
         .device-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 20px;
-            display: flex;
-            align-items: center;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            display: none;
         }
 
-        .back-button {
-            background: rgba(255,255,255,0.2);
+        .back-button-floating {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: rgba(102, 126, 234, 0.8);
             border: none;
             color: white;
             font-size: 1.5em;
-            padding: 8px 15px;
-            border-radius: 8px;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
             cursor: pointer;
-            margin-right: 15px;
+            z-index: 1001;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
             transition: background 0.2s;
         }
 
-        .back-button:hover {
-            background: rgba(255,255,255,0.3);
+        .back-button-floating:hover {
+            background: rgba(118, 75, 162, 0.9);
         }
 
-        .device-header-info {
-            flex: 1;
-        }
-
-        .device-header-name {
-            font-size: 1.8em;
-            font-weight: bold;
-        }
-
-        .device-header-subtitle {
-            font-size: 0.9em;
-            opacity: 0.8;
+        .device-screen.active .back-button-floating {
+            display: flex;
         }
 
         /* Page Navigation */
@@ -240,21 +234,21 @@
             min-width: 100%;
             height: 100%;
             overflow-y: auto;
-            padding: 20px;
+            padding: 10px;
         }
 
         .page-header {
             text-align: center;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             cursor: pointer;
             user-select: none;
+            padding: 8px;
         }
 
         .page-title {
-            font-size: 2em;
+            font-size: 1.3em;
             font-weight: bold;
             color: #667eea;
-            margin-bottom: 5px;
             transition: color 0.2s;
         }
 
@@ -263,33 +257,34 @@
         }
 
         .page-subtitle {
-            font-size: 0.9em;
+            font-size: 0.75em;
             color: #888;
+            margin-top: 3px;
         }
 
         /* Button Grid */
         .button-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-            gap: 15px;
-            max-width: 800px;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 10px;
+            max-width: 100%;
             margin: 0 auto;
         }
 
         .control-button {
             background: #1a1f3a;
             border: none;
-            border-radius: 12px;
-            padding: 25px 15px;
+            border-radius: 10px;
+            padding: 15px 10px;
             color: white;
-            font-size: 1em;
+            font-size: 0.9em;
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
 
         .control-button:hover {
@@ -307,15 +302,16 @@
         }
 
         .button-icon {
-            font-size: 2.5em;
+            font-size: 2em;
         }
 
         .button-label {
             font-weight: bold;
+            font-size: 0.85em;
         }
 
         .button-value {
-            font-size: 1.2em;
+            font-size: 1em;
             color: #4ade80;
         }
 
@@ -323,14 +319,14 @@
         .page-dots {
             display: flex;
             justify-content: center;
-            gap: 10px;
-            padding: 15px;
+            gap: 8px;
+            padding: 10px;
             background: #1a1f3a;
         }
 
         .dot {
-            width: 10px;
-            height: 10px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
             background: #444;
             transition: background 0.3s, width 0.3s;
@@ -339,8 +335,8 @@
 
         .dot.active {
             background: #667eea;
-            width: 25px;
-            border-radius: 5px;
+            width: 20px;
+            border-radius: 4px;
         }
 
         /* Debug Modal */
@@ -552,13 +548,7 @@
 
     <!-- Device Control Screen (Mobile Style) -->
     <div class="device-screen" id="device-screen">
-        <div class="device-header">
-            <button class="back-button" onclick="closeDeviceScreen()">←</button>
-            <div class="device-header-info">
-                <div class="device-header-name" id="current-device-name">Device</div>
-                <div class="device-header-subtitle" id="current-device-subtitle">Platform</div>
-            </div>
-        </div>
+        <button class="back-button-floating" onclick="closeDeviceScreen()">←</button>
 
         <div class="page-container">
             <div class="pages-wrapper" id="pages-wrapper">
