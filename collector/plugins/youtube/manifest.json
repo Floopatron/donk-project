@@ -18,5 +18,12 @@
     "icon": "assets/youtube-icon.svg"
   },
 
-  "commands": []
+  "commands": [
+    {
+      "id": "refresh",
+      "name": "Refresh Now",
+      "description": "Force immediate refresh of YouTube context",
+      "confirmation": false
+    }
+  ]
 }

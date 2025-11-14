@@ -385,7 +385,7 @@ end tell
 
     def execute_command(self, command_id: str, args: dict) -> dict:
         """
-        Execute command (YouTube plugin has no commands currently)
+        Execute command
 
         Args:
             command_id: Command identifier
@@ -394,7 +394,17 @@ end tell
         Returns:
             Result dict
         """
+        if command_id == "refresh":
+            # Force immediate context update by returning current state
+            logger.info("Refresh command received - forcing immediate context update")
+            # The context aggregator will automatically send the latest context
+            # after this command completes, so we just return success
+            return {
+                "success": True,
+                "message": "YouTube context refreshed"
+            }
+
         return {
             "success": False,
-            "message": "YouTube plugin does not support commands"
+            "message": f"Unknown command: {command_id}"
         }

@@ -174,6 +174,12 @@ class ContextAggregator:
             result = instance.execute_command(command_id, args or {})
 
             logger.info(f"Executed command '{command_id}' on plugin {plugin_id}: {result}")
+
+            # Trigger immediate context update after successful command
+            if result.get("success"):
+                logger.debug(f"Triggering immediate context update for {plugin_id} after command")
+                self.request_immediate_update(plugin_id)
+
             return result
 
         except Exception as e:

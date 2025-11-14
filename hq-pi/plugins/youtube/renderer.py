@@ -92,6 +92,14 @@ class YouTubeRenderer:
             "color": "#666666"
         })
 
+        # Refresh Button
+        widgets.append({
+            "type": "button",
+            "label": "🔄 Refresh Now",
+            "command_id": "refresh",
+            "color": "#9C27B0"
+        })
+
         return widgets
 
     def _format_duration(self, seconds: int) -> str:

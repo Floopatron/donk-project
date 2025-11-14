@@ -325,6 +325,35 @@
             font-size: 1.3em;
             font-weight: bold;
         }
+
+        .widget-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 8px;
+            padding: 12px 20px;
+            color: white;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 6px rgba(102, 126, 234, 0.3);
+        }
+
+        .widget-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(102, 126, 234, 0.5);
+        }
+
+        .widget-button:active {
+            transform: translateY(0);
+        }
+
+        .widget-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
     </style>
 </head>
 <body>
@@ -640,7 +669,7 @@
                                 <div class="plugin-subtitle">${deviceName}</div>
                             </div>
                             <div class="plugin-widgets">
-                                ${renderWidgets(pluginData.widgets)}
+                                ${renderWidgets(pluginData.widgets, deviceId, pluginId)}
                             </div>
                         </div>
                     `;
@@ -648,10 +677,60 @@
             }
 
             container.innerHTML = html;
+
+            // Add event listeners to all buttons
+            attachButtonHandlers();
         }
 
-        function renderWidgets(widgets) {
-            return widgets.map(widget => {
+        function attachButtonHandlers() {
+            document.querySelectorAll('.widget-button').forEach(button => {
+                button.addEventListener('click', function() {
+                    const deviceId = this.getAttribute('data-device-id');
+                    const pluginId = this.getAttribute('data-plugin-id');
+                    const commandId = this.getAttribute('data-command-id');
+
+                    sendCommand(deviceId, pluginId, commandId, this);
+                });
+            });
+        }
+
+        function sendCommand(deviceId, pluginId, commandId, buttonElement) {
+            console.log(`Sending command: ${pluginId}.${commandId} to ${deviceId}`);
+
+            // Disable button during execution
+            buttonElement.disabled = true;
+            const originalText = buttonElement.textContent;
+            buttonElement.textContent = '⏳ Sending...';
+
+            // Send command via WebSocket
+            socket.emit('send_command', {
+                device_id: deviceId,
+                plugin_id: pluginId,
+                command_id: commandId,
+                args: {}
+            });
+
+            // Re-enable button after a short delay
+            setTimeout(() => {
+                buttonElement.disabled = false;
+                buttonElement.textContent = originalText;
+            }, 2000);
+        }
+
+        // Listen for command results
+        socket.on('command_result', (data) => {
+            console.log('Command result:', data);
+
+            // Show success/error feedback
+            if (data.success) {
+                console.log(`✅ ${data.message}`);
+            } else {
+                console.error(`❌ ${data.message}`);
+            }
+        });
+
+        function renderWidgets(widgets, deviceId, pluginId) {
+            return widgets.map((widget, index) => {
                 if (widget.type === 'label') {
                     const sizeClass = widget.size === 'large' ? 'large' : '';
                     const color = widget.color || '#e0e0e0';
@@ -661,6 +740,21 @@
                                 ${widget.icon ? `<span class="widget-icon">${widget.icon}</span>` : ''}
                                 <span class="widget-text ${sizeClass}" style="color: ${color}">${widget.text}</span>
                             </div>
+                        </div>
+                    `;
+                } else if (widget.type === 'button') {
+                    const color = widget.color || '#667eea';
+                    const buttonId = `btn-${deviceId}-${pluginId}-${widget.command_id}-${index}`;
+                    return `
+                        <div class="widget" style="border-left-color: ${color}">
+                            <button class="widget-button"
+                                    id="${buttonId}"
+                                    data-device-id="${deviceId}"
+                                    data-plugin-id="${pluginId}"
+                                    data-command-id="${widget.command_id}"
+                                    style="background: linear-gradient(135deg, ${color} 0%, ${color}dd 100%)">
+                                ${widget.label}
+                            </button>
                         </div>
                     `;
                 }
