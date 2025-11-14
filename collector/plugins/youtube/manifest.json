@@ -9,7 +9,7 @@
     "file": "collector.py",
     "class": "YouTubeCollector",
     "update_interval": 30,
-    "dependencies": ["psutil", "pygetwindow"]
+    "dependencies": ["psutil"]
   },
 
   "renderer": {

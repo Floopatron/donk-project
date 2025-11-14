@@ -9,11 +9,15 @@ Detects when YouTube is open in any browser and tracks:
 - How long YouTube has been open
 
 Supports: Chrome, Brave, Opera, Firefox, Edge
+Cross-platform: Windows (native PowerShell), Linux (wmctrl/xdotool), macOS (AppleScript)
+NO EXTERNAL DEPENDENCIES REQUIRED (except psutil for process detection)
 """
 
 import re
 import time
 import logging
+import subprocess
+import platform
 from datetime import datetime, timezone
 from typing import Optional, Dict
 
@@ -22,11 +26,6 @@ try:
 except ImportError:
     psutil = None
 
-try:
-    import pygetwindow as gw
-except ImportError:
-    gw = None
-
 logger = logging.getLogger(__name__)
 
 
@@ -34,14 +33,20 @@ class YouTubeCollector:
     """Collects YouTube viewing activity from browser windows"""
 
     # Browser executable names to monitor
-    BROWSER_PROCESSES = [
-        'brave.exe', 'brave',
-        'opera.exe', 'opera',
-        'chrome.exe', 'chrome',
-        'firefox.exe', 'firefox',
-        'msedge.exe', 'msedge',
-        'chromium', 'chromium.exe'
-    ]
+    BROWSER_PROCESSES = {
+        'brave.exe': 'Brave',
+        'brave': 'Brave',
+        'opera.exe': 'Opera',
+        'opera': 'Opera',
+        'chrome.exe': 'Chrome',
+        'chrome': 'Chrome',
+        'firefox.exe': 'Firefox',
+        'firefox': 'Firefox',
+        'msedge.exe': 'Edge',
+        'msedge': 'Edge',
+        'chromium': 'Chromium',
+        'chromium.exe': 'Chromium'
+    }
 
     def __init__(self, config: dict):
         """
@@ -53,14 +58,13 @@ class YouTubeCollector:
         self.config = config
         self.youtube_start_time = None
         self.last_video_info = None
+        self.platform = platform.system()
 
         # Check dependencies
         if psutil is None:
-            logger.error("psutil not installed! YouTube plugin will not function.")
-        if gw is None:
-            logger.warning("pygetwindow not installed! Will use basic window detection.")
+            logger.warning("psutil not installed! Will use basic process detection.")
 
-        logger.info("YouTube collector initialized")
+        logger.info(f"YouTube collector initialized on {self.platform}")
 
     def get_context(self) -> Optional[Dict]:
         """
@@ -83,7 +87,7 @@ class YouTubeCollector:
             # YouTube is active
             if self.youtube_start_time is None:
                 self.youtube_start_time = time.time()
-                logger.info("YouTube opened")
+                logger.info(f"YouTube opened: {youtube_window}")
 
             # Extract video info from window title
             video_info = self._parse_window_title(youtube_window)
@@ -112,47 +116,211 @@ class YouTubeCollector:
 
     def _find_youtube_window(self) -> Optional[str]:
         """
-        Find browser window with YouTube open
+        Find browser window with YouTube open using platform-specific methods
 
         Returns:
             Window title string or None
         """
-        if gw is None and psutil is None:
+        if self.platform == "Windows":
+            return self._find_youtube_window_windows()
+        elif self.platform == "Linux":
+            return self._find_youtube_window_linux()
+        elif self.platform == "Darwin":  # macOS
+            return self._find_youtube_window_macos()
+        else:
+            logger.warning(f"Unsupported platform: {self.platform}")
             return None
 
+    def _find_youtube_window_windows(self) -> Optional[str]:
+        """
+        Windows: Use PowerShell to get window titles (NO external dependencies!)
+
+        Returns:
+            Window title string or None
+        """
         try:
-            # Method 1: Use pygetwindow (works on Windows)
-            if gw is not None:
-                try:
-                    windows = gw.getAllTitles()
-                    for title in windows:
-                        if 'youtube' in title.lower() and any(browser in title.lower() for browser in ['chrome', 'brave', 'opera', 'firefox', 'edge']):
-                            return title
-                except Exception as e:
-                    logger.debug(f"pygetwindow failed: {e}")
+            # PowerShell command to get all window titles containing 'youtube'
+            # Uses Windows API via Add-Type
+            ps_command = '''
+Add-Type @"
+    using System;
+    using System.Runtime.InteropServices;
+    using System.Text;
+    public class Win32 {
+        [DllImport("user32.dll")]
+        public static extern bool EnumWindows(EnumWindowsProc enumProc, IntPtr lParam);
 
-            # Method 2: Check running browser processes (fallback)
-            if psutil is not None:
-                for proc in psutil.process_iter(['name', 'cmdline']):
-                    try:
-                        if proc.info['name'] and proc.info['name'].lower() in [b.lower() for b in self.BROWSER_PROCESSES]:
-                            # Browser is running, try to get window title via psutil
-                            # This is limited but better than nothing
-                            try:
-                                # On some systems, we can check if browser has focus
-                                if gw:
-                                    active_window = gw.getActiveWindow()
-                                    if active_window and 'youtube' in active_window.title.lower():
-                                        return active_window.title
-                            except:
-                                pass
-                    except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        continue
+        [DllImport("user32.dll")]
+        public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
 
+        [DllImport("user32.dll")]
+        public static extern bool IsWindowVisible(IntPtr hWnd);
+
+        public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+    }
+"@
+
+$windows = New-Object System.Collections.ArrayList
+$callback = {
+    param($hWnd, $lParam)
+    if ([Win32]::IsWindowVisible($hWnd)) {
+        $text = New-Object System.Text.StringBuilder 256
+        [void][Win32]::GetWindowText($hWnd, $text, 256)
+        $title = $text.ToString()
+        if ($title -ne "" -and $title -match "youtube" -and $title -match "brave|chrome|opera|firefox|edge") {
+            [void]$windows.Add($title)
+        }
+    }
+    return $true
+}
+
+[Win32]::EnumWindows($callback, [IntPtr]::Zero)
+if ($windows.Count -gt 0) {
+    $windows[0]
+}
+'''
+
+            # Run PowerShell command
+            result = subprocess.run(
+                ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps_command],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+            )
+
+            if result.returncode == 0 and result.stdout.strip():
+                title = result.stdout.strip()
+                if title and 'youtube' in title.lower():
+                    return title
+
+        except subprocess.TimeoutExpired:
+            logger.warning("PowerShell window detection timed out")
         except Exception as e:
-            logger.error(f"Error finding YouTube window: {e}", exc_info=True)
+            logger.debug(f"PowerShell method failed: {e}")
+
+        # Fallback: Just check if browser is running (can't get window title)
+        if psutil:
+            if self._is_browser_running():
+                return "YouTube - Browser (window title unavailable)"
 
         return None
+
+    def _find_youtube_window_linux(self) -> Optional[str]:
+        """
+        Linux: Use wmctrl or xdotool command-line tools
+
+        Returns:
+            Window title string or None
+        """
+        # Try wmctrl first (most reliable)
+        try:
+            result = subprocess.run(
+                ["wmctrl", "-l"],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+
+            if result.returncode == 0:
+                for line in result.stdout.split('\n'):
+                    if 'youtube' in line.lower():
+                        # Extract title (everything after the 3rd column)
+                        parts = line.split(None, 3)
+                        if len(parts) >= 4:
+                            return parts[3]
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+        # Try xdotool as fallback
+        try:
+            result = subprocess.run(
+                ["xdotool", "search", "--name", "youtube"],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+
+            if result.returncode == 0 and result.stdout.strip():
+                # Get window title from window ID
+                window_id = result.stdout.strip().split('\n')[0]
+                title_result = subprocess.run(
+                    ["xdotool", "getwindowname", window_id],
+                    capture_output=True,
+                    text=True,
+                    timeout=2
+                )
+                if title_result.returncode == 0:
+                    return title_result.stdout.strip()
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+        return None
+
+    def _find_youtube_window_macos(self) -> Optional[str]:
+        """
+        macOS: Use AppleScript to get window titles
+
+        Returns:
+            Window title string or None
+        """
+        try:
+            # AppleScript to get visible window titles
+            script = '''
+tell application "System Events"
+    set windowList to {}
+    repeat with theProcess in (every process whose visible is true)
+        try
+            repeat with theWindow in (every window of theProcess)
+                set windowTitle to name of theWindow
+                if windowTitle contains "YouTube" then
+                    set end of windowList to windowTitle
+                end if
+            end repeat
+        end try
+    end repeat
+    return windowList
+end tell
+'''
+
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+
+            if result.returncode == 0 and result.stdout.strip():
+                # Return first YouTube window found
+                return result.stdout.strip().split(',')[0].strip()
+
+        except (FileNotFoundError, subprocess.TimeoutExpired, Exception) as e:
+            logger.debug(f"AppleScript method failed: {e}")
+
+        return None
+
+    def _is_browser_running(self) -> bool:
+        """
+        Check if any browser process is running (fallback when we can't get window titles)
+
+        Returns:
+            True if browser detected, False otherwise
+        """
+        if not psutil:
+            return False
+
+        try:
+            for proc in psutil.process_iter(['name']):
+                try:
+                    proc_name = proc.info['name']
+                    if proc_name and proc_name.lower() in [b.lower() for b in self.BROWSER_PROCESSES.keys()]:
+                        return True
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except Exception as e:
+            logger.debug(f"Process detection failed: {e}")
+
+        return False
 
     def _parse_window_title(self, window_title: str) -> Dict:
         """
