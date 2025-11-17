@@ -219,21 +219,9 @@
         }
 
         /* Page Navigation Buttons */
-        .page-nav-buttons {
+        .nav-button {
             position: fixed;
             top: 15px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: none;
-            gap: 15px;
-            z-index: 1001;
-        }
-
-        .device-screen.active .page-nav-buttons {
-            display: flex;
-        }
-
-        .nav-button {
             background: rgba(102, 126, 234, 0.9);
             border: none;
             color: white;
@@ -242,11 +230,24 @@
             height: 45px;
             border-radius: 50%;
             cursor: pointer;
-            display: flex;
+            display: none;
             align-items: center;
             justify-content: center;
             box-shadow: 0 4px 12px rgba(0,0,0,0.5);
             transition: background 0.2s, transform 0.2s;
+            z-index: 1001;
+        }
+
+        .device-screen.active .nav-button {
+            display: flex;
+        }
+
+        #prev-page-btn {
+            left: 15px;
+        }
+
+        #next-page-btn {
+            right: 15px;
         }
 
         .nav-button:hover {
@@ -264,7 +265,7 @@
         }
 
         @media (pointer: coarse) {
-            .page-nav-buttons {
+            .nav-button {
                 display: none !important;
             }
         }
@@ -641,10 +642,8 @@
         <button class="back-button-floating" onclick="closeDeviceScreen()">←</button>
 
         <!-- Page Navigation Buttons (for non-touch screens) -->
-        <div class="page-nav-buttons">
-            <button class="nav-button" id="prev-page-btn" onclick="previousPage()">←</button>
-            <button class="nav-button" id="next-page-btn" onclick="nextPage()">→</button>
-        </div>
+        <button class="nav-button" id="prev-page-btn" onclick="previousPage()">←</button>
+        <button class="nav-button" id="next-page-btn" onclick="nextPage()">→</button>
 
         <div class="page-container">
             <div class="pages-wrapper" id="pages-wrapper">
