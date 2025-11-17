@@ -191,14 +191,14 @@
 
         .back-button-floating {
             position: fixed;
-            top: 10px;
-            left: 10px;
-            background: rgba(102, 126, 234, 0.8);
+            bottom: 15px;
+            left: 15px;
+            background: rgba(102, 126, 234, 0.9);
             border: none;
             color: white;
             font-size: 1.5em;
-            width: 40px;
-            height: 40px;
+            width: 45px;
+            height: 45px;
             border-radius: 50%;
             cursor: pointer;
             z-index: 1001;
@@ -206,15 +206,67 @@
             align-items: center;
             justify-content: center;
             box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-            transition: background 0.2s;
+            transition: background 0.2s, transform 0.2s;
         }
 
         .back-button-floating:hover {
-            background: rgba(118, 75, 162, 0.9);
+            background: rgba(118, 75, 162, 1);
+            transform: scale(1.1);
         }
 
         .device-screen.active .back-button-floating {
             display: flex;
+        }
+
+        /* Page Navigation Buttons */
+        .page-nav-buttons {
+            position: fixed;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: none;
+            gap: 15px;
+            z-index: 1001;
+        }
+
+        .device-screen.active .page-nav-buttons {
+            display: flex;
+        }
+
+        .nav-button {
+            background: rgba(102, 126, 234, 0.9);
+            border: none;
+            color: white;
+            font-size: 1.3em;
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            transition: background 0.2s, transform 0.2s;
+        }
+
+        .nav-button:hover {
+            background: rgba(118, 75, 162, 1);
+            transform: scale(1.1);
+        }
+
+        .nav-button:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .nav-button:disabled:hover {
+            transform: none;
+        }
+
+        @media (pointer: coarse) {
+            .page-nav-buttons {
+                display: none !important;
+            }
         }
 
         /* Page Navigation */
@@ -346,14 +398,29 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0,0,0,0.95);
+            background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(5px);
             z-index: 2000;
             display: none;
-            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
         }
 
         .debug-modal.active {
             display: flex;
+        }
+
+        .debug-modal-content {
+            background: #0a0e27;
+            border-radius: 12px;
+            max-width: 800px;
+            width: 100%;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            overflow: hidden;
         }
 
         .debug-header {
@@ -480,6 +547,29 @@
             word-wrap: break-word;
         }
 
+        .message-data {
+            font-size: 0.9em;
+            margin-top: 8px;
+        }
+
+        .message-data-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 4px;
+            padding: 3px 0;
+        }
+
+        .message-data-key {
+            font-weight: bold;
+            color: #9ca3af;
+            min-width: 120px;
+        }
+
+        .message-data-value {
+            color: #e0e0e0;
+            flex: 1;
+        }
+
         .message-time {
             font-size: 0.75em;
             opacity: 0.6;
@@ -550,6 +640,12 @@
     <div class="device-screen" id="device-screen">
         <button class="back-button-floating" onclick="closeDeviceScreen()">←</button>
 
+        <!-- Page Navigation Buttons (for non-touch screens) -->
+        <div class="page-nav-buttons">
+            <button class="nav-button" id="prev-page-btn" onclick="previousPage()">←</button>
+            <button class="nav-button" id="next-page-btn" onclick="nextPage()">→</button>
+        </div>
+
         <div class="page-container">
             <div class="pages-wrapper" id="pages-wrapper">
                 <!-- Pages will be dynamically inserted here -->
@@ -562,22 +658,22 @@
     </div>
 
     <!-- Debug Communication Modal -->
-    <div class="debug-modal" id="debug-modal">
-        <div class="debug-header">
-            <div class="debug-title">📡 Debug Communications</div>
-            <button class="close-button" onclick="closeDebugModal()">✕</button>
-        </div>
-
-        <div class="debug-filters">
-            <span class="filter-label">Filter by Plugin:</span>
-            <div id="plugin-filters">
-                <!-- Filter checkboxes will be dynamically inserted here -->
+    <div class="debug-modal" id="debug-modal" onclick="closeDebugModalOnBackdrop(event)">
+        <div class="debug-modal-content" onclick="event.stopPropagation()">
+            <div class="debug-header">
+                <div class="debug-title">📡 Debug Communications</div>
+                <button class="close-button" onclick="closeDebugModal()">✕</button>
             </div>
-            <button class="refresh-button" onclick="refreshDebugMessages()">🔄 Refresh</button>
-        </div>
 
-        <div class="messages-container" id="messages-container">
-            <!-- Messages will be dynamically inserted here -->
+            <div class="debug-filters">
+                <span class="filter-label">Viewing:</span>
+                <span id="debug-context-info" style="color: #667eea; font-weight: bold;"></span>
+                <button class="refresh-button" onclick="refreshDebugMessages()">🔄 Refresh</button>
+            </div>
+
+            <div class="messages-container" id="messages-container">
+                <!-- Messages will be dynamically inserted here -->
+            </div>
         </div>
     </div>
 
@@ -590,6 +686,8 @@
         let pluginsData = {};
         let currentDeviceId = null;
         let currentPageIndex = 0;
+        let currentContextPlugin = null; // Current page's plugin for debug modal filtering
+        let totalPages = 0;
         let sessionMessages = {}; // {device_id: [{type, plugin_id, message, timestamp, direction}]}
         let pluginFilters = { youtube: true, system: true }; // Plugin visibility filters
 
@@ -784,10 +882,17 @@
                 }
             });
 
+            totalPages = pages.length;
+
+            // Set current context plugin based on current page
+            if (pages[currentPageIndex]) {
+                currentContextPlugin = pages[currentPageIndex].plugin_id;
+            }
+
             // Render pages
             pagesWrapper.innerHTML = pages.map((page, index) => `
                 <div class="page">
-                    <div class="page-header" onclick="openDebugModal()">
+                    <div class="page-header" onclick="openDebugModal('${page.plugin_id}')">
                         <div class="page-title">${PLUGIN_CONFIG[page.plugin_id]?.icon || '🔌'} ${page.name}</div>
                         <div class="page-subtitle">Tap to view debug logs</div>
                     </div>
@@ -804,6 +909,7 @@
 
             // Set initial position
             updatePagePosition();
+            updateNavButtons();
         }
 
         function renderSystemPage() {
@@ -857,8 +963,45 @@
 
         function goToPage(index) {
             currentPageIndex = index;
+
+            // Update current context plugin for debug modal
+            const pages = document.querySelectorAll('.page');
+            if (pages[index]) {
+                const header = pages[index].querySelector('.page-header');
+                if (header) {
+                    const onclick = header.getAttribute('onclick');
+                    const match = onclick.match(/openDebugModal\('([^']+)'\)/);
+                    if (match) {
+                        currentContextPlugin = match[1];
+                    }
+                }
+            }
+
             updatePagePosition();
             updateDots();
+            updateNavButtons();
+        }
+
+        function previousPage() {
+            if (currentPageIndex > 0) {
+                goToPage(currentPageIndex - 1);
+            }
+        }
+
+        function nextPage() {
+            if (currentPageIndex < totalPages - 1) {
+                goToPage(currentPageIndex + 1);
+            }
+        }
+
+        function updateNavButtons() {
+            const prevBtn = document.getElementById('prev-page-btn');
+            const nextBtn = document.getElementById('next-page-btn');
+
+            if (prevBtn && nextBtn) {
+                prevBtn.disabled = currentPageIndex === 0;
+                nextBtn.disabled = currentPageIndex >= totalPages - 1;
+            }
         }
 
         function updatePagePosition() {
@@ -923,10 +1066,17 @@
         }
 
         // ========== Debug Modal ==========
-        function openDebugModal() {
+        function openDebugModal(pluginId) {
             if (!currentDeviceId) return;
 
-            renderPluginFilters();
+            // Set context plugin if provided, otherwise use current
+            currentContextPlugin = pluginId || currentContextPlugin;
+
+            // Show context info
+            const contextInfo = document.getElementById('debug-context-info');
+            const config = PLUGIN_CONFIG[currentContextPlugin] || { name: currentContextPlugin, icon: '🔌' };
+            contextInfo.innerHTML = `${config.icon} ${config.name} Messages`;
+
             renderDebugMessages();
             debugModal.classList.add('active');
         }
@@ -935,23 +1085,10 @@
             debugModal.classList.remove('active');
         }
 
-        function renderPluginFilters() {
-            const filtersContainer = document.getElementById('plugin-filters');
-            const plugins = Object.keys(PLUGIN_CONFIG);
-
-            filtersContainer.innerHTML = plugins.map(pluginId => `
-                <label class="filter-checkbox">
-                    <input type="checkbox"
-                           ${pluginFilters[pluginId] ? 'checked' : ''}
-                           onchange="togglePluginFilter('${pluginId}')">
-                    <span class="plugin-badge ${pluginId}">${PLUGIN_CONFIG[pluginId].icon} ${PLUGIN_CONFIG[pluginId].name}</span>
-                </label>
-            `).join('');
-        }
-
-        function togglePluginFilter(pluginId) {
-            pluginFilters[pluginId] = !pluginFilters[pluginId];
-            renderDebugMessages();
+        function closeDebugModalOnBackdrop(event) {
+            if (event.target === debugModal) {
+                closeDebugModal();
+            }
         }
 
         function refreshDebugMessages() {
@@ -962,17 +1099,18 @@
             const messagesContainer = document.getElementById('messages-container');
             const messages = sessionMessages[currentDeviceId] || [];
 
-            // Filter messages by selected plugins
+            // Filter messages by current context plugin only
             const filteredMessages = messages.filter(msg =>
-                pluginFilters[msg.plugin_id] !== false
+                msg.plugin_id === currentContextPlugin
             );
 
             if (filteredMessages.length === 0) {
+                const config = PLUGIN_CONFIG[currentContextPlugin] || { name: currentContextPlugin, icon: '🔌' };
                 messagesContainer.innerHTML = `
                     <div class="empty-state">
                         <div style="font-size: 3em; margin-bottom: 15px;">📭</div>
-                        <div style="font-size: 1.2em;">No messages yet</div>
-                        <p style="margin-top: 10px; color: #666;">Messages will appear here as the device communicates with HQ</p>
+                        <div style="font-size: 1.2em;">No ${config.name} messages yet</div>
+                        <p style="margin-top: 10px; color: #666;">Messages will appear here as the device communicates</p>
                     </div>
                 `;
                 return;
@@ -986,10 +1124,9 @@
                     <div class="message ${msg.direction}">
                         <div class="message-bubble">
                             <div class="message-header">
-                                <span class="plugin-badge ${msg.plugin_id}">${config.icon} ${config.name}</span>
-                                <span>${msg.type}</span>
+                                <span class="plugin-badge ${msg.plugin_id}">${config.icon} ${msg.type}</span>
                             </div>
-                            <div class="message-content">${formatMessageContent(msg.message)}</div>
+                            ${formatMessageContent(msg.message)}
                             <div class="message-time">${time}</div>
                         </div>
                     </div>
@@ -1001,16 +1138,57 @@
         }
 
         function formatMessageContent(message) {
-            if (typeof message === 'string') return message;
+            if (typeof message === 'string') return `<div class="message-content">${message}</div>`;
 
             // Format common message types
             if (message.success !== undefined) {
-                return `${message.success ? '✅' : '❌'} ${message.message || 'Command executed'}`;
+                return `<div class="message-content">${message.success ? '✅' : '❌'} ${message.message || 'Command executed'}</div>`;
             }
 
-            // Truncate long JSON
-            const json = JSON.stringify(message, null, 2);
-            return json.length > 200 ? json.substring(0, 200) + '...' : json;
+            // Format as key-value pairs
+            const rows = [];
+            const skip = ['type', 'timestamp']; // Skip fields we show elsewhere
+
+            for (const [key, value] of Object.entries(message)) {
+                if (skip.includes(key)) continue;
+
+                let formattedValue = value;
+
+                // Format timestamps
+                if (key.includes('time') || key.includes('at') || key === 'timestamp') {
+                    try {
+                        const date = new Date(value);
+                        formattedValue = date.toLocaleString();
+                    } catch (e) {
+                        formattedValue = value;
+                    }
+                }
+                // Format booleans
+                else if (typeof value === 'boolean') {
+                    formattedValue = value ? '✅ Yes' : '❌ No';
+                }
+                // Format objects/arrays (nested)
+                else if (typeof value === 'object' && value !== null) {
+                    formattedValue = JSON.stringify(value, null, 2);
+                }
+                // Truncate long strings
+                else if (typeof value === 'string' && value.length > 100) {
+                    formattedValue = value.substring(0, 100) + '...';
+                }
+
+                rows.push(`
+                    <div class="message-data-row">
+                        <div class="message-data-key">${key}:</div>
+                        <div class="message-data-value">${formattedValue}</div>
+                    </div>
+                `);
+            }
+
+            if (rows.length === 0) {
+                return '<div class="message-content">Empty message</div>';
+            }
+
+            return `<div class="message-data">${rows.join('')}</div>`;
         }
 
         // ========== Utility Functions ==========
