@@ -159,6 +159,9 @@ def handle_connect(auth=None):
     # Send current collector list to newly connected client
     broadcast_collector_list()
 
+    # Send all stored plugin context to newly connected client
+    send_all_plugin_context()
+
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -277,8 +280,23 @@ def handle_context_update(data):
     context_data = data.get('data')
     timestamp = data.get('timestamp')
 
-    if not all([device_id, plugin_id, context_data]):
+    if not all([device_id, plugin_id]):
         logger.warning(f"Invalid context update: missing required fields")
+        return
+
+    # If context_data is None or empty, plugin is inactive - remove from store
+    if context_data is None or (isinstance(context_data, dict) and not context_data.get('active')):
+        context_store.remove_plugin_context(device_id, plugin_id)
+        logger.info(f"Plugin inactive, removed context: {device_id} / {plugin_id}")
+
+        # Broadcast empty update to remove plugin from UI
+        socketio.emit('plugin_update', {
+            'device_id': device_id,
+            'plugin_id': plugin_id,
+            'widgets': [],
+            'context': None,
+            'timestamp': timestamp
+        })
         return
 
     # Store context
@@ -421,6 +439,32 @@ def broadcast_collector_list():
     message = create_collector_list(collectors)
     socketio.emit(MessageType.COLLECTOR_LIST, message)
     logger.debug(f"Broadcasted collector list: {len(collectors)} collectors")
+
+
+def send_all_plugin_context():
+    """Send all stored plugin context to newly connected client"""
+    all_context = context_store.get_all_context()
+
+    for device_id, plugins in all_context.items():
+        for plugin_id, stored_context in plugins.items():
+            context_data = stored_context.get('data')
+            timestamp = stored_context.get('timestamp')
+
+            if context_data:
+                # Render widgets for this plugin
+                widgets = plugin_loader.render_plugin_widgets(plugin_id, context_data)
+
+                if widgets is not None:
+                    # Send plugin update to the newly connected client
+                    emit('plugin_update', {
+                        'device_id': device_id,
+                        'plugin_id': plugin_id,
+                        'widgets': widgets,
+                        'context': context_data,
+                        'timestamp': timestamp
+                    })
+
+    logger.debug(f"Sent all stored plugin context to new client")
 
 
 # =============================================================================
